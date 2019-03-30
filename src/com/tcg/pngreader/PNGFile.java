@@ -1,9 +1,14 @@
 package com.tcg.pngreader;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.zip.DataFormatException;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
 
 import static com.tcg.pngreader.PNGChunk.*;
 import static com.tcg.pngreader.PNGChunk.PNGChunkType.*;
@@ -18,11 +23,13 @@ public class PNGFile {
     private int compressionMethod;
     private int filterMethod;
     private int interlaceMethod;
+    private PNGColorType pngColorType;
 
     public PNGFile(Path path) throws IOException {
         readChunks(path);
         validateChunks();
         readIDHR();
+
     }
 
     private void readChunks(Path path) throws IOException {
@@ -107,7 +114,7 @@ public class PNGFile {
         }
     }
 
-    private void readIDHR() {
+    private void readIDHR() throws IOException {
         PNGChunk idhr = chunks.get(0);
         width = intFromBytes(idhr.data, 0);
         height = intFromBytes(idhr.data, 4);
@@ -116,6 +123,13 @@ public class PNGFile {
         compressionMethod = idhr.data[10];
         filterMethod = idhr.data[11];
         interlaceMethod = idhr.data[12];
+        pngColorType = PNGColorType.fromInt(colorType);
+        if(pngColorType == null) {
+            throwInvalidFile();
+        }
+        if(!pngColorType.isDepthSupported(bitDepth)) {
+            throwInvalidFile();
+        }
     }
 
     private List<PNGChunk> getTextChunks() {
@@ -156,6 +170,37 @@ public class PNGFile {
                 }
             }
             System.out.printf("%s : %s\n", keyword, text);
+        }
+    }
+
+    public void printIDATData() {
+        List<PNGChunk> idatChunks = getIDATChunks();
+        for (PNGChunk idatChunk : idatChunks) {
+            System.out.println(idatChunk.dataHex());
+        }
+    }
+
+    private byte[] idatData() throws IOException {
+        List<PNGChunk> idats = getIDATChunks();
+        byte[][] data = new byte[idats.size()][];
+        for (int i = 0; i < data.length; i++) {
+            data[i] = PNGChunk.IDATData(idats.get(i));
+        }
+        return PNGChunk.combineAll(data);
+    }
+
+    private byte[] uncompressIDATData() throws IOException, DataFormatException {
+        byte[] dat = idatData();
+        byte[] temp = new byte[dat.length * 4];
+        try(ByteArrayInputStream bais = new ByteArrayInputStream(dat);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            Inflater inflater = new Inflater();
+            inflater.setInput(dat);
+            while(!inflater.finished()) {
+                int size = inflater.inflate(temp);
+                baos.write(temp, 0, size);
+            }
+            return baos.toByteArray();
         }
     }
 

@@ -1,5 +1,8 @@
 package com.tcg.pngreader;
 
+import com.sun.javaws.exceptions.InvalidArgumentException;
+
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Set;
 
@@ -104,8 +107,61 @@ class PNGChunk {
         return name.toString();
     }
 
+    public String dataHex() {
+        StringBuilder dataBuilder = new StringBuilder();
+        for (int i = 0; i < data.length; i++) {
+            byte datum = data[i];
+            if(i > 0) dataBuilder.append("_");
+            dataBuilder.append(String.format("%02X", datum));
+        }
+        return dataBuilder.toString();
+    }
+
+    public byte[] getData(int start, int length) {
+        if(start + length > this.data.length) throw new IllegalArgumentException("Given parameters would cause out of bounds");
+        byte[] result = new byte[length];
+        for (int i = 0; i <  length; i++) {
+            result[i] = this.data[start + i];
+        }
+        return result;
+    }
+
+    public byte[] getData(int length) {
+        return getData(0, length);
+    }
+
+    public byte[] getData() {
+        return getData(0, this.length);
+    }
+
+    public int getLength() {
+        return length;
+    }
+
     @Override
     public String toString() {
         return String.format("%s: %d bytes, checksum = %X", typeName(), this.length, crc);
     }
+
+    public static byte[] IDATData(PNGChunk pngChunk) throws IOException {
+        if(!PNGChunkType.IDAT.isType(pngChunk)) throw new IOException("Given chunk is not an IDAT");
+        return pngChunk.getData(2, pngChunk.length - 6);
+    }
+
+    public static byte[] combineAll(byte[]... bytes) {
+        int length = 0;
+        for (byte[] aByte : bytes) {
+            length += aByte.length;
+        }
+        byte[] result = new byte[length];
+        int index = 0;
+        for (byte[] aByte : bytes) {
+            for (byte b : aByte) {
+                result[index] = b;
+                index++;
+            }
+        }
+        return result;
+    }
+
 }

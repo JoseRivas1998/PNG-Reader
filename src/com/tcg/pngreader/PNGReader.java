@@ -10,6 +10,7 @@ public class PNGReader {
         File f = new File(args[0]);
         PNGFile pngFile = new PNGFile(f.toPath());
         pngFile.printText();
+        pngFile.printIDATData();
     }
 
 }
